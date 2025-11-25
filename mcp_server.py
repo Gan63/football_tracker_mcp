@@ -1,46 +1,56 @@
-import os
+from flask import Flask, request, jsonify
 import base64
-from mcp.server.fastmcp import FastMCP
+import os
 from main import process_video_optimized
 
-server = FastMCP("football-mcp")
+app = Flask(__name__)
 
-@server.tool()
-def run_tracking(video_base64: str):
-    """
-    Runs the optimized football tracking pipeline via MCP.
-    """
-    os.makedirs("uploads", exist_ok=True)
-    os.makedirs("output", exist_ok=True)
+UPLOAD_DIR = "uploads"
+OUTPUT_DIR = "output"
 
-    input_path = "uploads/mcp_input.mp4"
-    output_path = "output/mcp_output.mp4"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    # 1️⃣ Save incoming video
+
+@app.route("/", methods=["GET"])
+def home():
+    return {"status": "MCP API Running", "message": "Use POST /run-tracking"}, 200
+
+
+@app.route("/run-tracking", methods=["POST"])
+def run_tracking():
     try:
+        data = request.get_json()
+
+        if not data or "video_base64" not in data:
+            return jsonify({"error": "video_base64 missing"}), 400
+
+        # 1️⃣ Decode incoming video
+        input_path = os.path.join(UPLOAD_DIR, "input_api.mp4")
+        output_path = os.path.join(OUTPUT_DIR, "output_api.mp4")
+
         with open(input_path, "wb") as f:
-            f.write(base64.b64decode(video_base64))
-    except Exception as e:
-        return {"status": "error", "message": f"Video decode failed: {str(e)}"}
+            f.write(base64.b64decode(data["video_base64"]))
 
-    # 2️⃣ Run your pipeline
-    try:
-        process_video_optimized(input_path, output_path)
-    except Exception as e:
-        return {"status": "error", "message": f"Processing failed: {str(e)}"}
+        # 2️⃣ Run your pipeline
+        try:
+            process_video_optimized(input_path, output_path)
+        except Exception as e:
+            return jsonify({"status": "error", "message": f"Processing failed: {str(e)}"}), 500
 
-    # 3️⃣ Encode the output video
-    try:
+        # 3️⃣ Encode output video to base64
         with open(output_path, "rb") as f:
-            output_b64 = base64.b64encode(f.read()).decode()
+            out_b64 = base64.b64encode(f.read()).decode()
+
+        return jsonify({
+            "status": "success",
+            "output_video_base64": out_b64,
+            "message": "Processing completed"
+        })
+
     except Exception as e:
-        return {"status": "error", "message": f"Encoding failed: {str(e)}"}
-
-    return {
-        "status": "success",
-        "output_video_base64": output_b64,
-        "message": "Tracking completed successfully"
-    }
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
-server.run()
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
