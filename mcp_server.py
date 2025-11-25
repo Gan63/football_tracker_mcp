@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
-import base64
-import os
+import os, base64
 from main import process_video_optimized
+
 
 app = Flask(__name__)
 
@@ -54,3 +54,4 @@ def run_tracking():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
+
