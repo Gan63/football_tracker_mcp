@@ -1,4 +1,3 @@
-from video_processing import read_video, save_video
 from trackers import *
 from team_assigner import *
 from player_ball_assigner import *
@@ -12,51 +11,44 @@ import gc
 
 os.environ["LOKY_MAX_CPU_COUNT"] = "4"
 
-def process_video_optimized(input_path,output_path):
+
+def process_video_optimized(input_path, output_path):
     """
-    Process a football video with player tracking, team assignment, and analysis.
-    
-    Args:
-        input_path (str): Path to input video file
-        output_path (str): Path where processed video will be saved
-        
-    Returns:
-        str: Path to the processed video file
-        
-    Raises:
-        ValueError: If video cannot be read
-        Exception: If processing fails at any stage
+    Clean and corrected version of your football tracking pipeline.
+    Returns a dictionary usable by MCP:
+    {
+        "processed_video_url": "mcp_output.mp4"
+    }
     """
-    cap = None
-    out = None
-    tracker = None
-    
+
     try:
         print("Reading video...")
         cap = cv2.VideoCapture(input_path)
         if not cap.isOpened():
-            raise ValueError("Error: Could not open video file.")
+            raise ValueError("Could not open input video")
 
-        frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fps = int(cap.get(cv2.CAP_PROP_FPS))
-        
-        fourcc = cv2.VideoWriter_fourcc(*'XVID')
-        out = cv2.VideoWriter(output_path, fourcc, fps, (frame_width, frame_height))
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fps = cap.get(cv2.CAP_PROP_FPS)
 
-        print("Initializing tracker...")
-        tracker = Tracker('models/yolov5su/best.pt')
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+
+        print("Initializing YOLO tracker...")
+        tracker = Tracker("models/yolov5su/best.pt")
 
         team_assigner = TeamAssigner()
         player_assigner = PlayerBallAssigner()
+        speed_est = SpeedAndDistance_Estimator()
         camera_movement = None
-        speed_dist = SpeedAndDistance_Estimator()
 
-        tracks = {"players": [], "ball": []}
+        team_colors_assigned = False
         team_ball_possession = []
 
-        frame_num = 0
-        while cap.isOpened():
+        frame_id = 0
+
+        while True:
             ret, frame = cap.read()
             if not ret:
                 break
@@ -64,62 +56,62 @@ def process_video_optimized(input_path,output_path):
             if camera_movement is None:
                 camera_movement = CameraMovement(frame)
 
-            print(f"Processing frame {frame_num}...")
-
+            # ---- Tracking ----
             frame_tracks = tracker.get_object_tracks([frame], read_from_stub=False)
             tracker.add_position_to_tracks(frame_tracks)
 
-            camera_movement_per_frame = camera_movement.get_camera_movement([frame])
-            camera_movement.adjust_tracks_positions(frame_tracks, camera_movement_per_frame)
+            # ---- Camera movement ----
+            cam_shift = camera_movement.get_camera_movement([frame])
+            camera_movement.adjust_tracks_positions(frame_tracks, cam_shift)
 
-            if "ball" in frame_tracks:
-                frame_tracks["ball"] = tracker.ball_interpolation(frame_tracks["ball"])
+            # ---- Team color detection ----
+            players_dict = frame_tracks.get("players", {})
+            if (not team_colors_assigned) and len(players_dict) > 0:
+                first_player_set = list(players_dict.values())[0]
+                team_assigner.assign_team_color(frame, first_player_set)
+                team_colors_assigned = True
 
-            speed_dist.add_speed_and_distance(frame_tracks)
+            # ---- Team assignment ----
+            for pid, pdata in players_dict.items():
+                team = team_assigner.get_player_team(frame, pdata["bbox"], pid)
+                pdata["team"] = team
+                pdata["team_color"] = team_assigner.team_colors.get(team, [255, 255, 255])
 
-            if not team_assigner.team_colors:
-                team_assigner.assign_team_color(frame, frame_tracks.get("players", [{}])[0])
+            # ---- Ball possession ----
+            ball_dict = frame_tracks.get("ball", {})
+            ball_bbox = ball_dict.get(1, {}).get("bbox")
 
-            for player_id, p_track in frame_tracks.get("players", [{}])[0].items():
-                team = team_assigner.get_player_team(frame, p_track["bbox"], player_id)
-                p_track["team"] = team
-                p_track["team_color"] = team_assigner.team_colors.get(team, [255, 255, 255])
-
-            ball_bbox = frame_tracks.get("ball", [{}])[0].get(1, {}).get("bbox")
-            if ball_bbox is not None:
-                closest_player = player_assigner.assign_ball_to_player(frame_tracks["players"][0], ball_bbox)
-                if closest_player != -1:
-                    frame_tracks["players"][0][closest_player]["ball_possession"] = True
-                    team_ball_possession.append(frame_tracks["players"][0][closest_player]["team"])
+            if ball_bbox:
+                nearest = player_assigner.assign_ball_to_player(players_dict, ball_bbox)
+                if nearest != -1:
+                    players_dict[nearest]["ball_possession"] = True
+                    team_ball_possession.append(players_dict[nearest]["team"])
                 else:
                     team_ball_possession.append(team_ball_possession[-1] if team_ball_possession else 1)
             else:
                 team_ball_possession.append(team_ball_possession[-1] if team_ball_possession else 1)
 
-            annotated_frame = tracker.draw_annotations([frame], frame_tracks, np.array(team_ball_possession))
-            annotated_frame = camera_movement.draw_camera_movement(annotated_frame, camera_movement_per_frame)
-            annotated_frame = speed_dist.draw_speed_and_distance(annotated_frame, frame_tracks)
+            # ---- Speed & Distance ----
+            speed_est.add_speed_and_distance(frame_tracks)
 
-            out.write(annotated_frame[0])
-            frame_num += 1
+            # ---- Draw everything ----
+            annotated = tracker.draw_annotations([frame], frame_tracks, np.array(team_ball_possession))[0]
+            annotated = camera_movement.draw_camera_movement(annotated, cam_shift)
+            annotated = speed_est.draw_speed_and_distance(annotated, frame_tracks)
 
-        print("Done!")
-        return output_path
-        
+            out.write(annotated)
+            frame_id += 1
+
+        cap.release()
+        out.release()
+
+        return {
+            "processed_video_url": os.path.basename(output_path)
+        }
+
     except Exception as e:
-        print(f"Error processing video: {str(e)}")
-        raise
+        print(f"Processing error: {e}")
+        return {"error": str(e)}
 
     finally:
-        if cap is not None:
-            cap.release()
-        if out is not None:
-            out.release()
         gc.collect()
-
-
-# Only run this if the script is executed directly (not imported)
-if __name__ == '__main__':
-    # Example usage - uncomment to test directly
-
-    process_video("input_videos/video2.mp4", "output/output_video.avi")
