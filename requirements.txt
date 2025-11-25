@@ -6,3 +6,4 @@ pillow
 supervision
 ultralytics
 scikit-learn
+gunicorn
