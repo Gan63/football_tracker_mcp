@@ -1,6 +1,7 @@
-mcp-server
-numpy
-opencv-python
 ultralytics
-flask
+opencv-python
+numpy
 pillow
+supervision
+scikit-learn
+mcp-server
