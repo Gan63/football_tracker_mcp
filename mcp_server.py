@@ -1,40 +1,46 @@
-import sys
 import os
 import base64
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
 from mcp.server.fastmcp import FastMCP
-from football_core import tracker_api
+from main import process_video_optimized
 
 server = FastMCP("football-mcp")
 
 @server.tool()
 def run_tracking(video_base64: str):
+    """
+    Runs the optimized football tracking pipeline via MCP.
+    """
     os.makedirs("uploads", exist_ok=True)
     os.makedirs("output", exist_ok=True)
 
     input_path = "uploads/mcp_input.mp4"
+    output_path = "output/mcp_output.mp4"
 
+    # 1️⃣ Save incoming video
     try:
         with open(input_path, "wb") as f:
             f.write(base64.b64decode(video_base64))
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": f"Video decode failed: {str(e)}"}
 
-    result = tracker_api.process_video_safe(input_path)
+    # 2️⃣ Run your pipeline
+    try:
+        process_video_optimized(input_path, output_path)
+    except Exception as e:
+        return {"status": "error", "message": f"Processing failed: {str(e)}"}
 
-    if "processed_video_url" not in result:
-        return {"status": "error", "message": result.get("error", "unknown error")}
-
-    output_path = f"output/{result['processed_video_url']}"
-
-    with open(output_path, "rb") as f:
-        output_b64 = base64.b64encode(f.read()).decode()
+    # 3️⃣ Encode the output video
+    try:
+        with open(output_path, "rb") as f:
+            output_b64 = base64.b64encode(f.read()).decode()
+    except Exception as e:
+        return {"status": "error", "message": f"Encoding failed: {str(e)}"}
 
     return {
         "status": "success",
-        "tracking_data": result,
-        "output_video_base64": output_b64
+        "output_video_base64": output_b64,
+        "message": "Tracking completed successfully"
     }
+
 
 server.run()
