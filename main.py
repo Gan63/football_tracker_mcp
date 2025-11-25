@@ -12,7 +12,7 @@ import gc
 
 os.environ["LOKY_MAX_CPU_COUNT"] = "4"
 
-def process_video(input_path, output_path):
+def process_video_optimized(input_path,output_path):
     """
     Process a football video with player tracking, team assignment, and analysis.
     
@@ -121,4 +121,5 @@ def process_video(input_path, output_path):
 # Only run this if the script is executed directly (not imported)
 if __name__ == '__main__':
     # Example usage - uncomment to test directly
+
     process_video("input_videos/video2.mp4", "output/output_video.avi")
