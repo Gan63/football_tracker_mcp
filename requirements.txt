@@ -1,0 +1,6 @@
+mcp-server
+numpy
+opencv-python
+ultralytics
+flask
+pillow
