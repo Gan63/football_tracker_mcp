@@ -116,3 +116,4 @@ def run_tracking():
 if __name__ == "__main__":
     print("⚡ MCP Server running locally on port 10000")
     app.run(host="0.0.0.0", port=10000)
+
