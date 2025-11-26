@@ -3,26 +3,24 @@ import base64
 import traceback
 from flask import Flask, request, jsonify
 from main import process_video_optimized
-import ultralytics
 
 # ============================================================
-# 🔥 Disable ALL Ultralytics internet, update, GitHub checks
+# 🔥 Disable ALL Ultralytics internet, GitHub, and version checks
 # ============================================================
 
-# Disable ALL online checks
 os.environ["YOLO_OFFLINE"] = "1"
-os.environ["ULTRALYTICS_HUB"] = "0"
 os.environ["YOLO_NO_VERIFY"] = "1"
+os.environ["ULTRALYTICS_HUB"] = "0"
 os.environ["YOLO_DISABLE_UPDATE"] = "1"
 os.environ["MPLCONFIGDIR"] = "/tmp/matplotlib"
 
-# Override functions that check GitHub or version
-ultralytics.checks.check_yolo = lambda *args, **kwargs: None
-ultralytics.checks.check_version = lambda *args, **kwargs: None
-ultralytics.checks.check_latest_pip_version = lambda *args, **kwargs: None
+import ultralytics
+ultralytics.checks.check_yolo = lambda *a, **k: None
+ultralytics.checks.check_version = lambda *a, **k: None
+ultralytics.checks.check_latest_pip_version = lambda *a, **k: None
 
 # ============================================================
-# Flask App Init
+# Flask App Configuration
 # ============================================================
 
 app = Flask(__name__)
@@ -43,7 +41,7 @@ def home():
     return {"status": "MCP API Running", "message": "Use POST /run-tracking"}, 200
 
 # ============================================================
-# Main Tracking Endpoint
+# MAIN TRACKING ENDPOINT
 # ============================================================
 
 @app.route("/run-tracking", methods=["POST"])
@@ -54,13 +52,12 @@ def run_tracking():
         if not data or "video_base64" not in data:
             return jsonify({"error": "video_base64 missing"}), 400
 
-        # Absolute file paths
         input_path = os.path.join(UPLOAD_DIR, "input_api.mp4")
-        output_path = os.path.join(OUTPUT_DIR, "output_api.mp4")
+        output_path = os.path.join(OUTPUT_DIR, "output_api.avi")  # AVI SAFE
 
-        # ====================================================
-        # 1️⃣ Decode video from Base64
-        # ====================================================
+        # -------------------------------------------------------
+        # 1️⃣ Decode Base64 → Save Video File
+        # -------------------------------------------------------
         try:
             with open(input_path, "wb") as f:
                 f.write(base64.b64decode(data["video_base64"]))
@@ -71,9 +68,9 @@ def run_tracking():
                 "details": str(e)
             }), 500
 
-        # ====================================================
-        # 2️⃣ Run Football Tracking
-        # ====================================================
+        # -------------------------------------------------------
+        # 2️⃣ Run Football Tracking Pipeline
+        # -------------------------------------------------------
         try:
             process_video_optimized(input_path, output_path)
         except Exception:
@@ -83,9 +80,9 @@ def run_tracking():
                 "details": traceback.format_exc()
             }), 500
 
-        # ====================================================
-        # 3️⃣ Encode output video back to Base64
-        # ====================================================
+        # -------------------------------------------------------
+        # 3️⃣ Read Output File and Return as Base64
+        # -------------------------------------------------------
         try:
             with open(output_path, "rb") as f:
                 out_b64 = base64.b64encode(f.read()).decode()
@@ -108,12 +105,10 @@ def run_tracking():
             "details": traceback.format_exc()
         }), 500
 
-
 # ============================================================
-# Local Debug Run (Render uses Gunicorn, not this part)
+# Local Debug Run (Render uses Gunicorn)
 # ============================================================
 
 if __name__ == "__main__":
-    print("⚡ MCP Server running locally on port 10000")
+    print("⚡ MCP Server Running at http://0.0.0.0:10000")
     app.run(host="0.0.0.0", port=10000)
-
