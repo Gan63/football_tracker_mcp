@@ -1,6 +1,14 @@
 from flask import Flask, request, jsonify
 import os, base64, traceback
 from main import process_video_optimized
+import ultralytics
+from ultralytics.utils.checks import check_requirements
+from ultralytics.utils import settings as ultralytics_settings
+
+# Disable GitHub checks completely
+ultralytics_settings.update({"checks": False})
+check_requirements = lambda *args, **kwargs: None
+
 
 app = Flask(__name__)
 
@@ -65,3 +73,4 @@ def run_tracking():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
+
