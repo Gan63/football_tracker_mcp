@@ -45,7 +45,7 @@ def process_video_optimized(input_path, output_path):
 
         print("Loading lightweight YOLO model...")
         # Change to tiny fast model
-        tracker = Tracker("models/yolov5n.pt")
+        tracker = Tracker("models/yolov8n.pt")
 
         team_assigner = TeamAssigner()
         player_assigner = PlayerBallAssigner()
@@ -153,3 +153,4 @@ def process_video_optimized(input_path, output_path):
 
     finally:
         gc.collect()
+
