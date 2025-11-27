@@ -1,0 +1,21 @@
+# Virtual environment
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Temporary video folders
+uploads/
+output/
+
+# Video files
+*.mp4
+*.avi
+*.mov
+*.mkv
+
+# Logs
+*.log
+.cache/
